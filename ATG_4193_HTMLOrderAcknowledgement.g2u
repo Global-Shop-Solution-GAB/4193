@@ -1,0 +1,561 @@
+Program.Sub.ScreenSU.Start
+Gui.F_EnterEmail..Create
+Gui.F_EnterEmail..Caption("Enter Recipient Email for this Customer")
+Gui.F_EnterEmail..Size(5340,1905)
+Gui.F_EnterEmail..MinX(0)
+Gui.F_EnterEmail..MinY(0)
+Gui.F_EnterEmail..Position(0,0)
+Gui.F_EnterEmail..BackColor(-2147483633)
+Gui.F_EnterEmail..MousePointer(0)
+Gui.F_EnterEmail..Event(UnLoad,F_EnterEmail_UnLoad)
+Gui.F_EnterEmail..Sizeable(False)
+Gui.F_EnterEmail.txtEmail.Create(TextBox,"",True,4680,300,0,150,390,True,0,"Arial",8,-2147483643,1)
+Gui.F_EnterEmail.lblEmail.Create(Label,"Recipient Email",True,1935,255,0,150,135,True,0,"Arial",8,-986896,0)
+Gui.F_EnterEmail.cmdOk.Create(Button)
+Gui.F_EnterEmail.cmdOk.Size(855,375)
+Gui.F_EnterEmail.cmdOk.Position(150,930)
+Gui.F_EnterEmail.cmdOk.Caption("Ok")
+Gui.F_EnterEmail.cmdOk.Event(Click,cmdOk_Click)
+Program.Sub.ScreenSU.End
+
+Program.Sub.Preflight.Start
+V.Global.sTemplateFilePath.Declare(String)
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+V.Local.bTemplateExists.Declare(boolean)
+V.Local.sRet.Declare(string)
+
+'set location of template
+F.Intrinsic.String.Concat(V.Caller.FilesDir, "\SalesOrderTemplate.txt", V.Local.sRet)
+V.Global.sTemplateFilePath.Set(V.Local.sRet)
+
+F.Intrinsic.File.Exists(V.Global.sTemplateFilePath, V.Local.bTemplateExists)
+
+F.Intrinsic.Control.If(V.Local.bTemplateExists)
+	'Open DB Connection
+	F.ODBC.Connection!con.OpenConnection(V.Ambient.PDSN, V.Ambient.PUser, V.Ambient.PPass)
+	'Set default email address to email in Sales Order Menu
+	Gui.F_EnterEmail.txtEmail.Text(V.Passed.000071)
+	Gui.F_EnterEmail..Show
+F.Intrinsic.Control.Else
+	F.Intrinsic.String.Concat("SalesOrderTemplate.txt can not be located from ", V.Global.sTemplateFilePath, V.Local.sRet)
+	F.Intrinsic.UI.Msgbox(V.Local.sRet, "File Not Found")
+F.Intrinsic.Control.EndIf
+Program.Sub.Main.End
+
+Program.Sub.cmdOk_Click.Start
+V.Local.bHasAtSign.Declare(boolean)
+V.Local.bContainsSpaces.Declare(boolean)
+
+'Check for spaces and '@' in email entered
+F.Intrinsic.String.IsInString(V.Screen.F_EnterEmail!txtEmail.Text,"@",True, V.Local.bHasAtSign)
+F.Intrinsic.String.IsInString(V.Screen.F_EnterEmail!txtEmail.Text," ",True, V.Local.bContainsSpaces)
+F.Intrinsic.Control.If(V.Local.bHasAtSign.Not)
+	F.Intrinsic.UI.Msgbox("You must enter a valid email for this customer","Invalid Email Address")
+	F.Intrinsic.Control.ExitSub
+F.Intrinsic.Control.ElseIf(V.Local.bContainsSpaces)
+	F.Intrinsic.UI.Msgbox("Email address cannot contain spaces","Invalid Email Address")
+	F.Intrinsic.Control.ExitSub
+F.Intrinsic.Control.EndIf
+F.Intrinsic.Control.CallSub(createhtml)
+Program.Sub.cmdOk_Click.End
+
+Program.Sub.CreateHTML.Start
+Function.Intrinsic.Control.SetErrorHandler("ErrorHandle")
+Function.Intrinsic.Control.ClearErrors
+
+V.Local.sBody.Declare(String)
+V.Local.sSalesOrderNo.Declare(string)
+V.Local.sCustomer.Declare(string)
+V.Local.sHTML.Declare(string)
+V.Local.sTextRet.Declare(string)
+V.Local.sNewRow.Declare(string)
+V.Local.iLoopCounter.Declare(long)
+V.Local.sSQL.Declare(string)
+V.Local.fOrderSubTotal.Declare(float)
+V.Local.fTaxableSubTotal.Declare(float)
+V.Local.fOrderTotal.Declare(float)
+V.Local.i.Declare(long, 1)
+V.Local.sItemNo.Declare(string)
+V.Local.bTax.Declare(boolean)
+V.Local.fTaxPrice.Declare(float)
+V.Local.fTaxSubTotal.Declare(float)
+
+'Load template to string
+F.Intrinsic.File.File2String(V.Global.sTemplateFilePath, V.Local.sBody) 'replace with directory for template
+'Split entire text file by {{BREAK}} Delimiter. 
+F.Intrinsic.String.Split(V.Local.sBody, "{{BREAK}}", V.Local.sBody)
+
+'Body(0) = message content
+'Body(1) = Row format for Table Items
+'Body(2) = Pricing/Description Row
+'Body(3) = Item Promise Date Row
+'Body(4) = Blank Row
+'Body(5) = Total Price Row
+'Body(6) = closing HTML tags
+
+'Make Sales Order Number 7 digits
+V.Local.sSalesOrderNo.Set(V.Passed.000003)
+F.Intrinsic.String.Len(V.Local.sSalesOrderNo, V.Local.iLoopCounter)
+F.Intrinsic.String.Format(V.Local.sSalesOrderNo, "000000#", V.Local.sSalesOrderNo)
+
+
+'Get Recordset from ORDER_HEADER Table
+F.Intrinsic.String.Concat("SELECT CUSTOMER, DATE_ORDER, DATE_DUE, DATE_SHIPPED, INSURANCE, CUSTOMER_PO, MARK_INFO, CODE_FOB, TERMS, WAY_BILL, SHIP_VIA, SALESPERSON FROM V_ORDER_HEADER WHERE ORDER_NO = '",V.Local.sSalesOrderNo,"' AND RECORD_TYPE = 'A'", V.Local.sSQL)
+F.ODBC.Connection!con.OpenLocalRecordsetRO("rst", V.Local.sSQL)
+
+F.Intrinsic.Control.If(V.ODBC.con!rst.EOF, <>, True)
+
+	'Get Customer name for finding phone number later
+	V.Local.sCustomer.Set(V.ODBC.con!rst.FieldValTrim!CUSTOMER)
+	F.Intrinsic.String.Replace(V.Local.sCustomer, "'", "''", V.Local.sCustomer)
+
+	F.Intrinsic.String.Replace(V.Local.sBody(0),"{{Sales_Order}}", V.Local.sSalesOrderNo,V.Local.sBody(0))
+	F.Intrinsic.String.Replace(V.Local.sBody(0),"{{Customer_No}}", V.ODBC.con!rst.FieldValTrim!CUSTOMER,V.Local.sBody(0))
+	F.Intrinsic.String.Replace(V.Local.sBody(0),"{{Salesman}}", V.ODBC.con!rst.FieldValTrim!SALESPERSON,V.Local.sBody(0))
+	F.Intrinsic.String.Replace(V.Local.sBody(0),"{{Customer_PO}}", V.ODBC.con!rst.FieldValTrim!CUSTOMER_PO,V.Local.sBody(0))
+	F.Intrinsic.String.Replace(V.Local.sBody(0),"{{Mark_Shipment}}", V.ODBC.con!rst.FieldValTrim!MARK_INFO,V.Local.sBody(0))
+	F.Intrinsic.String.Replace(V.Local.sBody(0),"{{FOB_Point}}", V.ODBC.con!rst.FieldValTrim!CODE_FOB,V.Local.sBody(0))
+	F.Intrinsic.String.Replace(V.Local.sBody(0),"{{Shipping_Type}}", V.ODBC.con!rst.FieldValTrim!SHIP_VIA,V.Local.sBody(0))
+	F.Intrinsic.String.Replace(V.Local.sBody(0),"{{terms}}", V.ODBC.con!rst.FieldValTrim!TERMS,V.Local.sBody(0))
+	F.Intrinsic.String.Replace(V.Local.sBody(0),"{{Waybill}}", V.ODBC.con!rst.FieldValTrim!WAY_BILL,V.Local.sBody(0))
+	F.Intrinsic.String.Replace(V.Local.sBody(0),"{{Insurance}}", V.ODBC.con!rst.FieldValTrim!INSURANCE,V.Local.sBody(0))
+
+	'Format Dates
+	F.Intrinsic.Control.CallSub(formatdate, "sDate",V.ODBC.con!rst.FieldValTrim!DATE_ORDER)
+	F.Intrinsic.String.Replace(V.Local.sBody(0),"{{Order_Date}}", V.Args.sFormattedDate,V.Local.sBody(0))
+
+	F.Intrinsic.Control.CallSub(formatdate, "sDate",V.ODBC.con!rst.FieldValTrim!DATE_SHIPPED)
+	F.Intrinsic.String.Replace(V.Local.sBody(0),"{{Ship_Date}}", V.Args.sFormattedDate,V.Local.sBody(0))
+
+	F.Intrinsic.Control.CallSub(formatdate, "sDate",V.ODBC.con!rst.FieldValTrim!DATE_DUE)
+	F.Intrinsic.String.Replace(V.Local.sBody(0),"{{Promise_Date}}", V.Args.sFormattedDate,V.Local.sBody(0))
+F.Intrinsic.Control.EndIf
+
+F.ODBC.con!rst.Close
+
+'GET ORDER TITLE
+F.Intrinsic.String.Concat("SELECT NAME_CUSTOMER FROM V_CUSTOMER_MASTER WHERE CUSTOMER = '",V.Local.sCustomer,"'", V.Local.sSQL)
+F.ODBC.Connection!con.ExecuteAndReturn(V.Local.sSQL, V.Local.sTextRet)
+F.Intrinsic.String.Replace(V.Local.sBody(0),"{{Company_Name}}", V.Ambient.CompanyName,V.Local.sBody(0))
+F.Intrinsic.String.Replace(V.Local.sBody(0),"{{Customer_Name}}", V.Local.sTextRet,V.Local.sBody(0))
+
+'Get Recordset from Billing Table
+F.Intrinsic.String.Concat("SELECT NAME_CUSTOMER, ADDRESS_1, ADDRESS_2, ADDRESS_3, ADDRESS_4, ADDRESS_5, CITY, STATE, ZIP_CODE, ATTENTION, COUNTRY, FLAG_INTL FROM V_ORDER_BILL_TO WHERE ORDER_NO = '",V.Local.sSalesOrderNo,"' AND RECORD_TYPE = 'B'", V.Local.sSQL)
+F.ODBC.Connection!con.OpenLocalRecordsetRO("rst", V.Local.sSQL)
+
+F.Intrinsic.Control.If(V.ODBC.con!rst.EOF, <>, True)
+	'if billing is international/Local, hide fields that shouldnt show
+	F.Intrinsic.Control.If(V.ODBC.con!rst.FieldValTrim!FLAG_INTL, =, "Y")
+		F.Intrinsic.String.Replace(V.Local.sBody(0),"{{B_international}}", "block",V.Local.sBody(0))
+		F.Intrinsic.String.Replace(V.Local.sBody(0),"{{B_Local}}", "none",V.Local.sBody(0))
+	F.Intrinsic.Control.Else
+		F.Intrinsic.String.Replace(V.Local.sBody(0),"{{B_international}}", "none",V.Local.sBody(0))
+		F.Intrinsic.String.Replace(V.Local.sBody(0),"{{B_Local}}", "block",V.Local.sBody(0))
+	F.Intrinsic.Control.EndIf
+
+	'Billing Info
+	F.Intrinsic.String.Replace(V.Local.sBody(0),"{{Billing_Name}}", V.ODBC.con!rst.FieldValTrim!NAME_CUSTOMER,V.Local.sBody(0))
+	F.Intrinsic.String.Replace(V.Local.sBody(0),"{{Customer_Address}}", V.ODBC.con!rst.FieldValTrim!ADDRESS_1,V.Local.sBody(0))
+	F.Intrinsic.String.Replace(V.Local.sBody(0),"{{Customer_Address2}}", V.ODBC.con!rst.FieldValTrim!ADDRESS_2,V.Local.sBody(0))
+	F.Intrinsic.String.Replace(V.Local.sBody(0),"{{Customer_Address3}}", V.ODBC.con!rst.FieldValTrim!ADDRESS_3,V.Local.sBody(0))
+	F.Intrinsic.String.Replace(V.Local.sBody(0),"{{Customer_Address4}}", V.ODBC.con!rst.FieldValTrim!ADDRESS_4,V.Local.sBody(0))
+	F.Intrinsic.String.Replace(V.Local.sBody(0),"{{Customer_Address5}}", V.ODBC.con!rst.FieldValTrim!ADDRESS_5,V.Local.sBody(0))
+	F.Intrinsic.String.Replace(V.Local.sBody(0),"{{Customer_City}}", V.ODBC.con!rst.FieldValTrim!CITY,V.Local.sBody(0))
+	F.Intrinsic.String.Replace(V.Local.sBody(0),"{{Customer_State}}", V.ODBC.con!rst.FieldValTrim!STATE,V.Local.sBody(0))
+	F.Intrinsic.String.Replace(V.Local.sBody(0),"{{Customer_Zip}}", V.ODBC.con!rst.FieldValTrim!ZIP_CODE,V.Local.sBody(0))
+	F.Intrinsic.String.Replace(V.Local.sBody(0),"{{B_Country}}",V.ODBC.con!rst.FieldValTrim!COUNTRY,V.Local.sBody(0))
+
+	'If Billing Attn exists, Replace with Attn: attn_field
+	F.Intrinsic.Control.If(V.ODBC.con!rst.FieldValTrim!ATTENTION, <>, "")
+	   F.Intrinsic.String.Replace(V.Local.sBody(0),"{{BAttn}}", "Attn: ",V.Local.sBody(0))
+	'else replace with ""
+	F.Intrinsic.Control.Else
+	   F.Intrinsic.String.Replace(V.Local.sBody(0),"{{BAttn}}", "",V.Local.sBody(0))
+	F.Intrinsic.Control.EndIf
+	F.Intrinsic.String.Replace(V.Local.sBody(0),"{{Customer_Attention}}", V.ODBC.con!rst.FieldValTrim!ATTENTION,V.Local.sBody(0))
+F.Intrinsic.Control.Endif
+F.ODBC.con!rst.Close
+
+
+'Get Phone Number from CUSTOMER_MSTR Table
+F.Intrinsic.String.Concat("SELECT TELEPHONE FROM V_CUSTOMER_MASTER WHERE CUSTOMER = '",V.Local.sCustomer,"'", V.Local.sSQL)
+F.ODBC.Connection!con.ExecuteAndReturn(V.Local.sSQL, V.Local.sTextRet)
+F.Intrinsic.Control.If(V.Local.sTextRet.Trim, <>, "")
+	F.Intrinsic.String.Format(V.Local.sTextRet, "###-###-####", V.Local.sTextRet)
+	F.Intrinsic.String.Replace(V.Local.sBody(0),"{{Customer_Phone}}", V.Local.sTextRet,V.Local.sBody(0))
+F.Intrinsic.Control.Else
+	F.Intrinsic.String.Replace(V.Local.sBody(0),"{{Customer_Phone}}", "",V.Local.sBody(0))
+F.Intrinsic.Control.EndIf
+
+'Get FAX number from CUSTOMER_SALES Table
+F.Intrinsic.String.Concat("SELECT FAX_NUMBER FROM V_CUSTOMER_SALES WHERE CUSTOMER = '",V.Local.sCustomer,"'", V.Local.sSQL)
+F.ODBC.Connection!con.ExecuteAndReturn(V.Local.sSQL, V.Local.sTextRet)
+F.Intrinsic.Control.If(V.Local.sTextRet.Trim, <>, "")
+	F.Intrinsic.String.Format(V.Local.sTextRet, "###-###-####", V.Local.sTextRet)
+	F.Intrinsic.String.Concat("FAX: ", V.Local.sTextRet, V.Local.sTextRet)
+	F.Intrinsic.String.Replace(V.Local.sBody(0),"{{FAX}}", V.Local.sTextRet,V.Local.sBody(0))
+F.Intrinsic.Control.Else
+	F.Intrinsic.String.Replace(V.Local.sBody(0),"{{FAX}}", "",V.Local.sBody(0))
+F.Intrinsic.Control.EndIf
+
+'Get Recordset from Shipping Table
+F.Intrinsic.String.Concat("SELECT NAME_CUSTOMER_SHIP, ADDRESS_1_SHIP, ADDRESS_2_SHIP, ADDRESS_3_SHIP, ADDRESS_4_SHIP, ADDRESS_5_SHIP, CITY_SHIP, STATE_SHIP, CODE_ZIP_SHIP, ATTENTION_SHIP, COUNTRY_SHIP, FLAG_INTL_SHIP FROM V_ORDER_SHIP_TO WHERE ORDER_NO = '",V.Local.sSalesOrderNo,"' AND ORDER_SHIP_ID = '", Variable.Passed.000061,"'  AND RECORD_TYPE = 'C'", V.Local.sSQL)
+F.ODBC.Connection!con.OpenLocalRecordsetRO("rst", V.Local.sSQL)
+
+F.Intrinsic.Control.If(V.ODBC.con!rst.EOF, <>, True)
+	'if shipping is international/Local, hide fields that shouldnt show
+	F.Intrinsic.Control.If(V.ODBC.con!rst.FieldValTrim!FLAG_INTL_SHIP, =, "N")
+		F.Intrinsic.String.Replace(V.Local.sBody(0),"{{S_international}}", "none",V.Local.sBody(0))
+		F.Intrinsic.String.Replace(V.Local.sBody(0),"{{S_Local}}", "block",V.Local.sBody(0))
+	F.Intrinsic.Control.Else
+		F.Intrinsic.String.Replace(V.Local.sBody(0),"{{S_international}}", "block",V.Local.sBody(0))
+		F.Intrinsic.String.Replace(V.Local.sBody(0),"{{S_Local}}", "none",V.Local.sBody(0))
+	F.Intrinsic.Control.EndIf
+
+	'Shipping Info
+	F.Intrinsic.String.Replace(V.Local.sBody(0),"{{Shipping_Name}}", V.ODBC.con!rst.FieldValTrim!NAME_CUSTOMER_SHIP,V.Local.sBody(0))
+	F.Intrinsic.String.Replace(V.Local.sBody(0),"{{Shipping_Address}}", V.ODBC.con!rst.FieldValTrim!ADDRESS_1_SHIP,V.Local.sBody(0))
+	F.Intrinsic.String.Replace(V.Local.sBody(0),"{{Shipping_Address2}}", V.ODBC.con!rst.FieldValTrim!ADDRESS_2_SHIP,V.Local.sBody(0))
+	F.Intrinsic.String.Replace(V.Local.sBody(0),"{{Shipping_Address3}}", V.ODBC.con!rst.FieldValTrim!ADDRESS_3_SHIP,V.Local.sBody(0))
+	F.Intrinsic.String.Replace(V.Local.sBody(0),"{{Shipping_Address4}}", V.ODBC.con!rst.FieldValTrim!ADDRESS_4_SHIP,V.Local.sBody(0))
+	F.Intrinsic.String.Replace(V.Local.sBody(0),"{{Shipping_Address5}}", V.ODBC.con!rst.FieldValTrim!ADDRESS_5_SHIP,V.Local.sBody(0))
+	F.Intrinsic.String.Replace(V.Local.sBody(0),"{{Shipping_City}}", V.ODBC.con!rst.FieldValTrim!CITY_SHIP,V.Local.sBody(0))
+	F.Intrinsic.String.Replace(V.Local.sBody(0),"{{Shipping_State}}", V.ODBC.con!rst.FieldValTrim!STATE_SHIP,V.Local.sBody(0))
+	F.Intrinsic.String.Replace(V.Local.sBody(0),"{{Shipping_Zip}}", V.ODBC.con!rst.FieldValTrim!CODE_ZIP_SHIP,V.Local.sBody(0))
+	F.Intrinsic.String.Replace(V.Local.sBody(0),"{{S_Country}}",V.ODBC.con!rst.FieldValTrim!COUNTRY_SHIP,V.Local.sBody(0))
+
+	'If Shipping Attn exists, Replace with Attn: attn_field
+	F.Intrinsic.Control.If(V.ODBC.con!rst.FieldValTrim!ATTENTION_SHIP, <>, "")
+	   F.Intrinsic.String.Replace(V.Local.sBody(0),"{{SAttn:}}", "Attn: ",V.Local.sBody(0))
+	'else replace with ""
+	F.Intrinsic.Control.Else
+	   F.Intrinsic.String.Replace(V.Local.sBody(0),"{{SAttn:}}", "",V.Local.sBody(0))
+	F.Intrinsic.Control.EndIf
+	F.Intrinsic.String.Replace(V.Local.sBody(0),"{{Shipping_Attention}}", V.ODBC.con!rst.FieldValTrim!ATTENTION_SHIP, V.Local.sBody(0))
+F.Intrinsic.Control.EndIf
+
+F.ODBC.con!rst.Close
+
+'V_ORDER_TEXT ceased to exist in 2016.2+
+'This ARC project exists for only 2015.3 plus, leaving 2015.3 and 2016.1 being the only ones using V_ORDER_TEXT
+F.Intrinsic.Control.If(V.Caller.GSSVersion, =, "2015.3", OR, V.Caller.GSSVersion, =, "2016.1")
+	F.Intrinsic.String.Concat("SELECT ORDER_LINE, TEXT FROM V_ORDER_TEXT WHERE ORDER_NO = '",V.Local.sSalesOrderNo,"' ORDER BY TEXT_SEQ", V.Local.sSQL)
+F.Intrinsic.Control.Else
+	F.Intrinsic.String.Concat("SELECT ORDER_LINE, TEXT FROM V_ORDER_LN_TEXT WHERE ORDER_NUM = '",V.Local.sSalesOrderNo,"' ORDER BY ORDER_LINE, ORDER_TYPE", V.Local.sSQL)
+F.Intrinsic.Control.EndIf
+F.ODBC.Connection!con.OpenLocalRecordsetRO("rstDESC", V.Local.sSQL)
+
+F.Intrinsic.Control.If(V.ODBC.con!rstDESC.EOF, <>, True)
+	'go through recordset and add any header descriptions
+	F.Intrinsic.Control.DoUntil(V.ODBC.con!rstDESC.EOF)
+		F.Intrinsic.Control.If(V.ODBC.con!rstDESC.FieldValTrim!ORDER_LINE, =, "")
+			F.Intrinsic.String.Replace(V.Local.sBody(2), "{{Extra_Desc}}", V.ODBC.con!rstDESC.FieldValTrim!TEXT, V.Local.sNewRow)
+			F.Intrinsic.String.Concat(V.Local.sBody(0), V.Local.sNewRow, V.Local.sBody(0))
+		F.Intrinsic.Control.EndIf
+		F.ODBC.con!rstDESC.MoveNext
+	F.Intrinsic.Control.Loop
+	F.ODBC.con!rstDESC.MoveFirst
+F.Intrinsic.Control.EndIf
+
+'Blank row for cleaner table
+F.Intrinsic.String.Concat(V.Local.sBody(0), V.Local.sBody(4), V.Local.sBody(0))'Blank row
+
+
+
+'Get recordset for ORDER_TEXT
+F.Intrinsic.String.Concat("SELECT RECORD_NO, LINE_TYPE, QTY_ORDERED, UM_ORDER, PART, DESCRIPTION, PRICE, EXTENSION, FLAG_TAX_STATUS, ITEM_PROMISE_DT FROM V_ORDER_LINES WHERE ORDER_NO = '",V.Local.sSalesOrderNo,"' ORDER BY RECORD_NO", V.Local.sSQL)
+F.ODBC.Connection!con.OpenLocalRecordsetRO("rstLINES", V.Local.sSQL)
+
+F.Intrinsic.Control.If(V.ODBC.con!rstLINES.EOF, <>, True)
+
+	'Create new row for each item in Sale Order
+	F.Intrinsic.Control.DoUntil(V.ODBC.con!rstLINES.EOF)
+
+		F.Intrinsic.String.Format(V.Local.i, "00#", V.Local.sItemNo)
+		F.Intrinsic.String.Replace(V.Local.sBody(1), "{{item_no}}", V.Local.sItemNo, V.Local.sNewRow)
+		F.Intrinsic.String.Replace(V.Local.sNewRow, "{{Item_Type}}", V.ODBC.con!rstLINES.FieldValTrim!LINE_TYPE, V.Local.sNewRow)
+
+		F.Intrinsic.String.Format(V.ODBC.con!rstLINES.FieldValTrim!QTY_ORDERED, "#", V.Local.sTextRet)
+		F.Intrinsic.String.Replace(V.Local.sNewRow, "{{Order_Quantity}}", V.Local.sTextRet, V.Local.sNewRow)
+
+		F.Intrinsic.String.Replace(V.Local.sNewRow, "{{UM}}", V.ODBC.con!rstLINES.FieldValTrim!UM_ORDER, V.Local.sNewRow)
+		F.Intrinsic.String.Replace(V.Local.sNewRow, "{{Part_No}}", V.ODBC.con!rstLINES.FieldValTrim!PART, V.Local.sNewRow)
+		F.Intrinsic.String.Replace(V.Local.sNewRow, "{{Description}}", V.ODBC.con!rstLINES.FieldValTrim!DESCRIPTION, V.Local.sNewRow)
+
+		F.Intrinsic.String.Format(V.ODBC.con!rstLINES.FieldValTrim!PRICE, "#.0000", V.Local.sTextRet)
+		F.Intrinsic.String.Replace(V.Local.sNewRow, "{{Unit_Price}}", V.Local.sTextRet, V.Local.sNewRow)
+
+		F.Intrinsic.String.Replace(V.Local.sNewRow, "{{Extended_Price}}", V.ODBC.con!rstLINES.FieldValTrim!EXTENSION, V.Local.sNewRow)
+		F.Intrinsic.String.Concat(V.Local.sBody(0), V.Local.sNewRow, V.Local.sBody(0))
+
+		F.Intrinsic.Control.If(V.ODBC.con!rstDESC.EOF, <>, True)
+			'go through descriptions and add any descriptions for this item
+			F.Intrinsic.Control.DoUntil(V.ODBC.con!rstDESC.EOF)
+				F.Intrinsic.Control.If(V.ODBC.con!rstDESC.FieldValTrim!ORDER_LINE, =, V.ODBC.con!rstLINES.FieldValTrim!RECORD_NO)
+					F.Intrinsic.String.Replace(V.Local.sBody(2), "{{Extra_Desc}}", V.ODBC.con!rstDESC.FieldValTrim!TEXT, V.Local.sNewRow)
+					F.Intrinsic.String.Concat(V.Local.sBody(0), V.Local.sNewRow, V.Local.sBody(0))
+				F.Intrinsic.Control.EndIf
+				F.ODBC.con!rstDESC.MoveNext
+			F.Intrinsic.Control.Loop
+			F.ODBC.con!rstDESC.MoveFirst
+		F.Intrinsic.Control.EndIf
+
+		'add promise date
+		F.Intrinsic.Control.If(V.ODBC.con!rstLINES.FieldValTrim!ITEM_PROMISE_DT, <>, "", OR, V.ODBC.con!rstLINES.FieldValTrim!ITEM_PROMISE_DT, <>, "1/1/1900")
+			F.Intrinsic.String.Replace(V.Local.sBody(3), "{{Promise_Date}}", V.ODBC.con!rstLINES.FieldValTrim!ITEM_PROMISE_DT, V.Local.sNewRow)
+			F.Intrinsic.String.Concat(V.Local.sBody(0), V.Local.sNewRow, V.Local.sBody(0))
+		F.Intrinsic.Control.EndIf
+
+		F.Intrinsic.String.Concat(V.Local.sBody(0), V.Local.sBody(4), V.Local.sBody(0))'Blank row
+
+		'add to subtotal
+		F.Intrinsic.Math.Add(V.Local.i, 1, V.Local.i)
+		F.Intrinsic.Math.Add(V.Local.fOrderSubTotal, V.ODBC.con!rstLINES.FieldValTrim!EXTENSION, V.Local.fOrderSubTotal)
+
+		'add to taxable subtotal for taxes
+		F.Intrinsic.Control.If(V.ODBC.con!rstLINES.FieldVal!FLAG_TAX_STATUS, =, "T")
+			F.Intrinsic.Math.Add(V.Local.fTaxableSubTotal, V.ODBC.con!rstLINES.FieldValTrim!EXTENSION, V.Local.fTaxableSubTotal)
+		F.Intrinsic.Control.EndIf
+
+		F.ODBC.con!rstLINES.MoveNext
+	F.Intrinsic.Control.Loop
+F.Intrinsic.Control.EndIf
+
+F.ODBC.con!rstLINES.Close	
+
+'Add SubTotal Price
+F.Intrinsic.String.Replace(V.Local.sBody(5),"{{Description}}", "Order SubTotal", V.Local.sNewRow)
+
+F.Intrinsic.String.Format(V.Local.fOrderSubTotal, "#.0000", V.Local.sTextRet)
+F.Intrinsic.String.Replace(V.Local.sNewRow,"{{Unit_Price}}", V.Local.sTextRet, V.Local.sNewRow)
+
+F.Intrinsic.String.Concat(V.Local.sBody(0), V.Local.sNewRow, V.Local.sBody(0))
+F.Intrinsic.String.Concat(V.Local.sBody(0), V.Local.sBody(4), V.Local.sBody(0))'Blank row
+
+
+'Get Tax info
+F.Intrinsic.String.Concat("SELECT TAX_APPLY_1, TAX_APPLY_2, TAX_APPLY_3, TAX_APPLY_4, TAX_APPLY_5, TAX_APPLY_6, TAX_APPLY_7, TAX_APPLY_8, TAX_APPLY_9, TAX_APPLY_10 FROM V_ORDER_HEADER WHERE ORDER_NO='",V.Local.sSalesOrderNo,"'", V.Local.sSQL)
+F.ODBC.Connection!con.OpenLocalRecordsetRO("rstTaxApplies", V.Local.sSQL)
+V.Local.bTax.Set(True)
+F.Intrinsic.Control.If(V.ODBC.con!rstTaxApplies.FieldValTrim!TAX_APPLY_1, =, "Y")
+	F.Intrinsic.String.Replace(V.Local.sBody(0),"{{Tax}}", "T", V.Local.sBody(0))
+F.Intrinsic.Control.ElseIf(V.ODBC.con!rstTaxApplies.FieldValTrim!TAX_APPLY_2, =, "Y")
+	F.Intrinsic.String.Replace(V.Local.sBody(0),"{{Tax}}", "T", V.Local.sBody(0))
+F.Intrinsic.Control.ElseIf(V.ODBC.con!rstTaxApplies.FieldValTrim!TAX_APPLY_3, =, "Y")
+	F.Intrinsic.String.Replace(V.Local.sBody(0),"{{Tax}}", "T", V.Local.sBody(0))
+F.Intrinsic.Control.ElseIf(V.ODBC.con!rstTaxApplies.FieldValTrim!TAX_APPLY_4, =, "Y")
+	F.Intrinsic.String.Replace(V.Local.sBody(0),"{{Tax}}", "T", V.Local.sBody(0))
+F.Intrinsic.Control.ElseIf(V.ODBC.con!rstTaxApplies.FieldValTrim!TAX_APPLY_5, =, "Y")
+	F.Intrinsic.String.Replace(V.Local.sBody(0),"{{Tax}}", "T", V.Local.sBody(0))
+F.Intrinsic.Control.ElseIf(V.ODBC.con!rstTaxApplies.FieldValTrim!TAX_APPLY_6, =, "Y")
+	F.Intrinsic.String.Replace(V.Local.sBody(0),"{{Tax}}", "T", V.Local.sBody(0))
+F.Intrinsic.Control.ElseIf(V.ODBC.con!rstTaxApplies.FieldValTrim!TAX_APPLY_7, =, "Y")
+	F.Intrinsic.String.Replace(V.Local.sBody(0),"{{Tax}}", "T", V.Local.sBody(0))
+F.Intrinsic.Control.ElseIf(V.ODBC.con!rstTaxApplies.FieldValTrim!TAX_APPLY_8, =, "Y")
+	F.Intrinsic.String.Replace(V.Local.sBody(0),"{{Tax}}", "T", V.Local.sBody(0))
+F.Intrinsic.Control.ElseIf(V.ODBC.con!rstTaxApplies.FieldValTrim!TAX_APPLY_9, =, "Y")
+	F.Intrinsic.String.Replace(V.Local.sBody(0),"{{Tax}}", "T", V.Local.sBody(0))
+F.Intrinsic.Control.ElseIf(V.ODBC.con!rstTaxApplies.FieldValTrim!TAX_APPLY_10, =, "Y")
+	F.Intrinsic.String.Replace(V.Local.sBody(0),"{{Tax}}", "T", V.Local.sBody(0))
+F.Intrinsic.Control.Else
+	F.Intrinsic.String.Replace(V.Local.sBody(0),"{{Tax}}", "E", V.Local.sBody(0))
+	V.Local.bTax.Set(False)
+F.Intrinsic.Control.EndIf
+
+F.ODBC.con!rstTaxApplies.Close
+
+F.Intrinsic.Control.If(V.Local.bTax, =, True)
+	'Get recordset for TAXES
+	F.Intrinsic.String.Concat("SELECT A.DESCR, A.RATE FROM V_AR_TAX_TABLES A, V_CUSTOMER_TAX_AUTH C WHERE A.AUTH = C.TAX_AUTH AND C.CUST = '",V.Local.sCustomer,"'", V.Local.sSQL)
+	F.ODBC.Connection!con.OpenLocalRecordsetRO("rstTAXES", V.Local.sSQL)
+	F.Intrinsic.Control.DoUntil(V.ODBC.con!rstTAXES.EOF)
+		'Add a row for each TAX with TAX Information and cost
+		F.Intrinsic.String.Format(V.ODBC.con!rstTAXES.FieldValTrim!RATE, "#.00000", V.Local.sTextRet)
+		F.Intrinsic.String.Concat(V.ODBC.con!rstTAXES.FieldValTrim!DESCR," ", V.Local.sTextRet, V.Local.sTextRet)
+		F.Intrinsic.String.Replace(V.Local.sBody(5),"{{Description}}", V.Local.sTextRet, V.Local.sNewRow)
+
+		'Get Tax subtotal
+		F.Intrinsic.Math.Mult(V.Local.fTaxableSubTotal, V.ODBC.con!rstTAXES.FieldValTrim!RATE, V.Local.fTaxPrice)
+		F.Intrinsic.Math.Round(V.Local.fTaxPrice, 2, 1, V.Local.fTaxPrice)
+		F.Intrinsic.Math.Add(V.Local.fTaxSubTotal, V.Local.fTaxPrice, V.Local.fTaxSubTotal)
+
+		'Add price of TAX to row
+		F.Intrinsic.String.Format(V.Local.fTaxPrice, "#.0000", V.Local.sTextRet)
+		F.Intrinsic.String.Replace(V.Local.sNewRow,"{{Unit_Price}}", V.Local.sTextRet, V.Local.sNewRow)
+		F.Intrinsic.String.Concat(V.Local.sBody(0), V.Local.sNewRow, V.Local.sBody(0))
+
+		F.ODBC.con!rstTAXES.MoveNext
+	F.Intrinsic.Control.Loop
+
+	'Add TAX SubTotal Line
+	F.Intrinsic.String.Replace(V.Local.sBody(5),"{{Description}}", "Tax SubTotal", V.Local.sNewRow)
+	F.Intrinsic.String.Format(V.Local.fTaxSubTotal, "#.0000", V.Local.sTextRet)
+	F.Intrinsic.String.Replace(V.Local.sNewRow,"{{Unit_Price}}", V.Local.sTextRet, V.Local.sNewRow)
+	F.Intrinsic.String.Concat(V.Local.sBody(0), V.Local.sNewRow, V.Local.sBody(0))
+
+	F.Intrinsic.String.Concat(V.Local.sBody(0), V.Local.sBody(4), V.Local.sBody(0))'Blank row
+	F.ODBC.con!rstTAXES.Close
+F.Intrinsic.Control.EndIf
+
+
+'Add Total Price
+F.Intrinsic.Math.Add(V.Local.fOrderSubTotal, V.Local.fOrderTotal, V.Local.fOrderTotal)
+F.Intrinsic.Math.Add(V.Local.fTaxSubTotal, V.Local.fOrderTotal, V.Local.fOrderTotal)
+F.Intrinsic.String.Replace(V.Local.sBody(5),"{{Description}}", "TOTAL ORDER", V.Local.sNewRow)
+
+F.Intrinsic.String.Format(V.Local.fOrderTotal, "#.0000", V.Local.sTextRet)
+F.Intrinsic.String.Replace(V.Local.sNewRow,"{{Unit_Price}}", V.Local.sTextRet, V.Local.sNewRow)
+
+F.Intrinsic.String.Concat(V.Local.sBody(0), V.Local.sNewRow, V.Local.sBody(0))
+
+
+
+'Add any further descriptions
+F.Intrinsic.Control.If(V.ODBC.con!rstDESC.EOF, <>, True)
+	F.Intrinsic.String.Concat(V.Local.sBody(0), V.Local.sBody(4), V.Local.sBody(0))'Blank row
+	'go through recordset and add any footer descriptions
+	F.Intrinsic.Control.DoUntil(V.ODBC.con!rstDESC.EOF)
+		F.Intrinsic.Control.If(V.ODBC.con!rstDESC.FieldValTrim!ORDER_LINE, =, "ZZZZ")
+			F.Intrinsic.String.Replace(V.Local.sBody(2), "{{Extra_Desc}}", V.ODBC.con!rstDESC.FieldValTrim!TEXT, V.Local.sNewRow)
+			F.Intrinsic.String.Concat(V.Local.sBody(0), V.Local.sNewRow, V.Local.sBody(0))
+		F.Intrinsic.Control.EndIf
+		F.ODBC.con!rstDESC.MoveNext
+	F.Intrinsic.Control.Loop
+F.Intrinsic.Control.EndIf
+
+F.ODBC.con!rstDESC.Close
+
+
+
+'Add Ending HTML Tags
+F.Intrinsic.String.Concat(V.Local.sBody(0), V.Local.sBody(6), V.Local.sHTML) 
+
+
+'if Extended Price = Y, show column, else hide column
+'Currently looking for where this is in DB
+F.Intrinsic.String.Replace(V.Local.sHTML, "{{E_Price}}", "block", V.Local.sHTML)
+
+F.Intrinsic.Control.CallSub(createfile,"sHTMLMessage", V.Local.sHTML)
+
+F.Intrinsic.Control.ExitSub
+
+Function.Intrinsic.Control.Label("ErrorHandle")
+Function.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	F.Intrinsic.String.Concat("Could not generate HTML",V.Ambient.NewLine,V.Ambient.ErrorDescription, v.Local.sTextRet)
+	Function.Intrinsic.UI.Msgbox(V.Local.sTextRet)
+Function.Intrinsic.Control.endif
+Program.Sub.CreateHTML.End
+
+Program.Sub.CreateFile.Start
+Function.Intrinsic.Control.SetErrorHandler("ErrorHandle")
+Function.Intrinsic.Control.ClearErrors
+
+V.Local.sTempDir.Declare(string)
+V.Local.bDirExists.Declare(boolean)
+V.Local.sFQP.Declare(string)
+V.Local.sError.Declare(string)
+
+'C:\Users\UserProfile\AppData\Local\Temp\GSS
+F.Intrinsic.String.Concat(V.System.Temp, "\GSS\", V.Local.sTempDir)
+
+'If %temp%\GSS does not exists, make it
+F.Intrinsic.File.DirExists(V.Local.sTempDir, v.Local.bDirExists)
+F.Intrinsic.Control.If(v.Local.bDirExists, =, false)
+	F.Communication.FTP.MakeDirectory(v.Local.sTempDir)
+F.Intrinsic.Control.EndIf
+
+'Create File Name
+V.Local.sFileName.Declare(string)
+F.Intrinsic.String.Concat("VHTML",V.Caller.Terminal,".HTM", V.Local.sFileName)
+
+'add file name to directory path
+F.Intrinsic.String.Concat(V.Local.sTempDir, V.Local.sFileName, V.Local.sFQP)
+
+'create file in %temp%\GSS
+F.Intrinsic.File.String2File(V.Local.sFQP, V.Args.sHTMLMessage)
+
+F.Intrinsic.Control.CallSub(sendemail, "sFileName", V.Local.sFileName, "sTempDir", V.Local.sTempDir)
+
+F.Intrinsic.Control.ExitSub
+
+Function.Intrinsic.Control.Label("ErrorHandle")
+Function.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	F.Intrinsic.String.Concat("Could not create file ", V.Local.sFileName,V.Ambient.NewLine,V.Ambient.ErrorDescription, v.Local.sError)
+	Function.Intrinsic.UI.Msgbox(V.Local.sError)
+Function.Intrinsic.Control.endif
+Program.Sub.CreateFile.End
+
+Program.Sub.SendEmail.Start
+'Email information:
+'Sender: email of logged in GSUser if present, admin email from Comm. Option otherwise
+'Recipient: txtEmail.Text
+'subject: "Order Acknowledgement (order number) from (company name)" 
+	'(order number) = actual order number
+	'(company name) = name associated with the current company code (Companies table in Local Common)
+'Body: HTML Code
+'Attachment: VHTML###.HTM
+
+V.Local.sUserEmail.Declare(string)
+V.Local.sFullName.Declare(string)
+V.Local.sReceiverEmail.Declare(string)
+V.Local.sTitle.Declare(string)
+V.Local.iHandle.Declare(long)
+V.Local.sAttachment.Declare(string)
+
+'Create title
+F.Intrinsic.String.Concat("Order Acknowledgement ", Variable.Passed.000003, " From ", V.Ambient.CompanyName, V.Local.sTitle)
+
+F.Global.Security.GetUserEmail(V.Caller.User, V.Local.sUserEmail)
+F.Intrinsic.Control.If(V.Local.sUserEmail, =, "")
+	F.Global.General.ReadOptionCommon("3110", "0", "0", 1, "", V.Local.sUserEmail)
+F.Intrinsic.Control.EndIf
+F.Global.Security.GetFullName(V.Caller.User, V.Local.sFullName)
+F.Intrinsic.String.Concat(V.Local.sUserEmail,"*!*",V.Local.sFullName, V.Local.sUserEmail)
+'EndIf
+
+'Set Receiver Credentials
+V.Local.sReceiverEmail.Set(V.Screen.F_EnterEmail!txtEmail.Text)
+
+'Set Attachment
+F.Intrinsic.String.Concat(V.Args.sFileName,"*!*", V.Args.sTempDir, V.Local.sAttachment)
+
+'Send Email
+F.Intrinsic.Control.If(V.Local.sUserEmail, <>, "")
+	Function.Global.Messaging.QueueMessage(Variable.Caller.CompanyCode, 0, "", V.Local.sTitle, V.Local.sUserEmail, V.Local.sReceiverEmail, "", 5, "", false, "", "", "", "", "", "", "", V.Local.sAttachment, false)
+F.Intrinsic.Control.Else
+	F.Intrinsic.UI.Msgbox("No Administrative Email Address set in Communication Options")
+	F.Intrinsic.Control.ExitSub
+F.Intrinsic.Control.EndIf 
+
+'Open File
+F.Intrinsic.File.GetHandle(V.Local.iHandle)
+F.Intrinsic.Task.ShellExec(V.Local.iHandle, "open", V.Args.sFileName,"",V.Args.sTempDir, 1)
+
+F.ODBC.Connection!con.Close
+F.Intrinsic.Control.End
+
+Program.Sub.SendEmail.End
+
+Program.Sub.F_EnterEmail_UnLoad.Start
+F.ODBC.Connection!con.Close
+F.Intrinsic.Control.End
+
+Program.Sub.F_EnterEmail_UnLoad.End
+
+Program.Sub.FormatDate.Start
+V.Local.sNewDate.Declare(string)
+
+F.Intrinsic.Control.If(V.Args.sDate, =, "1/1/1900")
+	V.Local.sNewDate.Set("")
+F.Intrinsic.Control.Else
+	F.Intrinsic.String.Format(V.Args.sDate, "MM/Dd/yy", V.Local.sNewDate)
+F.Intrinsic.Control.EndIf
+
+F.Intrinsic.Variable.AddRV("sFormattedDate", V.Local.sNewDate)
+Program.Sub.FormatDate.End
+
+Program.Sub.Comments.Start
+${$0$}$$}$$}$8/10/2016 2:56:58 PM$}$False
+Program.Sub.Comments.End
