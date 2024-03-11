@@ -1,0 +1,189 @@
+<html>
+   <head>
+      <title>Order Acknowledgement from {{Company_Name}}</title>
+   </head>
+   <body>
+      <h2 align="center"><strong>&nbsp;Order Acknowledgement from {{Company_Name}} <br>for Customer {{Customer_Name}}</strong></h2>
+      <p align="center">&nbsp;</p>
+      <table border="0" width="90%">
+         <tbody>
+            <tr>
+               <td width="10%" valign="top" align="right"><font color="#0000ff"><strong>Sold To:</strong></font></td>
+               <td width="40%" valign="top">
+                  <table width="100%" border="1">
+                     <tbody>
+                        <tr>
+                           <td>
+                              {{Billing_Name}}<br>{{Customer_Address}}<br>{{Customer_Address2}}<br>{{Customer_Address3}}
+                              <br>
+                              <div style="display:{{B_international}}">
+                                 {{Customer_Address4}}<br>{{Customer_Address5}} <!--International Only !-->
+                              </div>
+                              <div style="display:{{B_Local}}">
+                                 {{Customer_City}}&nbsp;&nbsp;{{Customer_State}}&nbsp;&nbsp;{{Customer_Zip}}<!--Local Only !-->
+                              </div>
+                              {{B_Country}}<br>
+                              {{Customer_Phone}} {{Fax}}
+                           </td>
+                        </tr>
+                     </tbody>
+                  </table>
+               </td>
+               <td width="10%" valign="top" align="right"><font color="#0000ff"><strong>Ship To:</strong></font></td>
+               <td width="40%" valign="top">
+                  <table width="100%" border="1">
+                     <tbody>
+                        <tr>
+                           <td>
+                              {{Shipping_Name}}<br>{{Shipping_Address}}<br>{{Shipping_Address2}}<br>{{Shipping_Address3}}
+                              <br>
+                              <div style="display:{{S_international}}">
+                                 {{Shipping_Address4}}<br>{{Shipping_Address5}} <!--International Only !-->
+                              </div>
+                              <div style="display:{{S_Local}}">
+                                 {{Shipping_City}}&nbsp;&nbsp;{{Shipping_State}}&nbsp;&nbsp;{{Shipping_Zip}}<!--Local Only !-->  
+                              </div>
+                              {{S_Country}}<br>
+                           </td>
+                        </tr>
+                     </tbody>
+                  </table>
+               </td>
+            </tr>
+            <tr>
+               <td width="10%" valign="top" align="right"><font color="#0000ff"><strong>{{BAttn}}</strong></font></td> <!--if Attn is not blank {{BAttn:}} = "Attn:"" otherwise ""!-->
+               <td width="40%" valign="top">{{Customer_Attention}}&nbsp;</td>
+               <td width="10%" valign="top" align="right"><font color="#0000ff"><strong>{{SAttn:}}</strong></font></td> <!--if Attn is not blank {{SAttn:}} = "Attn:"" otherwise ""!-->
+               <td width="40%" valign="top">{{Shipping_Attention}}&nbsp;</td>
+            </tr>
+         </tbody>
+      </table>
+      <p><br></p>
+      <table align="center" border="0">
+         <tbody>
+            <tr>
+               <td><font color="#0000ff"><strong>Sales Order</strong></font></td>
+               <td>{{Sales_Order}}</td>
+               <td width="150"></td>
+               <td><font color="#0000ff"><strong>Customer No.</strong></font></td>
+               <td>{{Customer_No}}</td>
+            </tr>
+            <tr>
+               <td><font color="#0000ff"><strong>Order Date</strong></font></td>
+               <td>{{Order_Date}}</td>
+               <td width="150"></td>
+               <td><font color="#0000ff"><strong>Tax</strong></font></td>
+               <td>{{tax}}</td>
+            </tr>
+            <tr>
+               <td><font color="#0000ff"><strong>Promise Date</strong></font></td>
+               <td>{{Promise_Date}}</td>
+               <td width="150"></td>
+               <td><font color="#0000ff"><strong>Salesman</strong></font></td>
+               <td>{{Salesman}}</td>
+            </tr>
+            <tr>
+               <td><font color="#0000ff"><strong>Cust PO #</strong></font></td>
+               <td>{{Customer_PO}}</td>
+               <td width="150"></td>
+               <td><font color="#0000ff"><strong>Mark Shipment</strong></font></td>
+               <td>{{Mark_Shipment}}</td>
+            </tr>
+            <tr>
+               <td><font color="#0000ff"><strong>FOB Point</strong></font></td>
+               <td>{{FOB_Point}}</td>
+               <td width="150"></td>
+               <td><font color="#0000ff"><strong>Ship Date</strong></font></td>
+               <td>{{Ship_Date}}</td>
+            </tr>
+            <tr>
+               <td><font color="#0000ff"><strong>Shipped Via</strong></font></td>
+               <td>{{Shipping_Type}}</td>
+               <td width="150"></td>
+               <td><font color="#0000ff"><strong>Terms</strong></font></td>
+               <td>{{terms}}</td>
+            </tr>
+            <tr>
+               <td><font color="#0000ff"><strong>Waybill</strong></font></td>
+               <td>{{Waybill}}</td>
+               <td width="150"></td>
+               <td><font color="#0000ff"><strong>Insurance</strong></font></td>
+               <td>{{Insurance}}</td>
+            </tr>
+         </tbody>
+      </table>
+      <p><br><br></p>
+      <table align="center" border="1">
+         <tbody>
+            <tr>
+               <td align="middle" bgcolor="#0000ff"><font color="#ffffff"><strong>Item</strong></font></td>
+               <td align="middle" bgcolor="#0000ff"><font color="#ffffff"><strong>T</strong></font></td>
+               <td align="middle" bgcolor="#0000ff"><font color="#ffffff"><strong>Order Qty</strong></font></td>
+               <td align="middle" bgcolor="#0000ff"><font color="#ffffff"><strong>Unit</strong></font></td>
+               <td align="middle" bgcolor="#0000ff"><font color="#ffffff"><strong>Part Number/Revision</strong></font></td>
+               <td align="middle" bgcolor="#0000ff"><font color="#ffffff"><strong>Description</strong></font></td>
+               <td align="middle" bgcolor="#0000ff"><font color="#ffffff"><strong>Unit Price<br>$         </strong></font></td>
+               <td align="middle" bgcolor="#0000ff" style="display:{{E_Price}}"><font color="#ffffff"><strong>Extended Price<br>$         </strong></font></td>
+            </tr>
+{{BREAK}}
+			<tr>
+      			<td valign="top">{{item_no}}</td>
+      			<td valign="top">{{Item_Type}}</td>
+      			<td valign="top" align="right" nowrap="">{{Order_Quantity}}</td>
+      			<td valign="top">{{UM}}</td>
+      			<td valign="top" nowrap="">{{Part_No}}</td>
+      			<td valign="top" align="left">{{Description}}</td>
+      			<td valign="top" align="right">{{Unit_Price}}</td>
+               <td valign="top" align="right" style="display:{{E_Price}}">{{Extended_Price}}</td>
+   			</tr>
+{{BREAK}}
+			<tr>
+      			<td valign="top">&nbsp;</td>
+      			<td valign="top">&nbsp;</td>
+      			<td valign="top" align="right" nowrap="">&nbsp;</td>
+      			<td valign="top">&nbsp;</td>
+      			<td valign="top" nowrap="">&nbsp;</td>
+      			<td valign="top" align="left">&nbsp;{{Extra_Desc}}</td>
+      			<td valign="top" align="right">&nbsp;</td>
+
+               <td valign="top" align="right" style="display:{{E_Price}}">&nbsp;</td>
+   			</tr>
+{{BREAK}}
+			<tr>
+      			<td valign="top">&nbsp;</td>
+      			<td valign="top">&nbsp;</td>
+      			<td valign="top" align="right" nowrap="">&nbsp;</td>
+      			<td valign="top">&nbsp;</td>
+      			<td valign="top" nowrap="">&nbsp;</td>
+      			<td valign="top" align="left">&nbsp;PROMISED: {{Promise_Date}}</td>
+      			<td valign="top" align="right">&nbsp;</td>
+
+               <td valign="top" align="right" style="display:{{E_Price}}">&nbsp;</td>
+   			</tr>
+{{BREAK}}
+			<tr>
+      			<td valign="top">&nbsp;</td>
+      			<td valign="top">&nbsp;</td>
+      			<td valign="top" align="right" nowrap="">&nbsp;</td>
+      			<td valign="top">&nbsp;</td>
+      			<td valign="top" nowrap="">&nbsp;</td>
+      			<td valign="top" align="left">&nbsp;</td>
+      			<td valign="top" align="right">&nbsp;</td>
+               <td valign="top" align="right" style="display:{{E_Price}}">&nbsp;</td>
+   			</tr>
+{{BREAK}}
+         <tr>
+               <td valign="top">&nbsp;</td>
+               <td valign="top">&nbsp;</td>
+               <td valign="top" align="right" nowrap="">&nbsp;</td>
+               <td valign="top">&nbsp;</td>
+               <td valign="top" nowrap="">&nbsp;</td>
+               <td valign="top" align="right">{{Description}}</td>
+               <td valign="top" align="right">{{Unit_Price}}</td>
+               <td valign="top" align="right" style="display:{{E_Price}}">&nbsp;</td>
+            </tr>
+{{BREAK}}
+            </tbody>
+      </table>
+   </body>
+</html>
